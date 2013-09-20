@@ -125,15 +125,8 @@ int main(int argc, char * argv[]) {
     printf("\n");
 
     /*close socket and deinitialize */
-    
-
-
-
-
-
     close(s);
     
-
     if (error_code)
 	   return 0;
     else
