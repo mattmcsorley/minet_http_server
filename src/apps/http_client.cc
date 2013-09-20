@@ -78,18 +78,18 @@ int main(int argc, char * argv[]) {
         minet_perror("Could not write");
     }
     
+
     printf("bytes written %d\n", res);
+
 
     /* first read loop -- read headers */
     
     if ((res = minet_read(s, buf, sizeof(buf)-1) < 0)){
         minet_perror("Could not read");
     }
+
    
     printf("bytes read %d\n", res);
-
-    
-    //printf("received: %s", buf);
 
     
 
