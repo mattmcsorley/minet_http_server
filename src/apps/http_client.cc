@@ -1,7 +1,7 @@
 #include "minet_socket.h"
 #include <stdlib.h>
 #include <ctype.h>
-#include <errno.h>
+
 
 #define BUFSIZE 1024
 #define MAX_LINE 1024
@@ -11,9 +11,8 @@ int main(int argc, char * argv[]) {
     int server_port    = -1;
     char * server_path = NULL;
     char * req         = NULL;
-    bool ok            = false;
     
-    int s, len, res;
+    int s, res;
     char buf[MAX_LINE];
     struct hostent *host_addr;
     struct sockaddr_in server_socket;
@@ -61,7 +60,7 @@ int main(int argc, char * argv[]) {
     /* connect to the server socket */
    
     memcpy(&server_socket.sin_addr, host_addr->h_addr_list[0], host_addr->h_length);
-     server_socket.sin_family = AF_INET;
+    server_socket.sin_family = AF_INET;
     server_socket.sin_port = htons(server_port);
     
     if(minet_connect(s, &server_socket) < 0){
@@ -74,39 +73,69 @@ int main(int argc, char * argv[]) {
     /* wait till socket can be read. */
     /* Hint: use select(), and ignore timeout for now. */
 
-    if ((res = minet_write(s, req, 1024)) <= 0)
+    if ((res = minet_write(s, req, strlen(req)*sizeof(char))) <= 0)
     {
         minet_perror("Could not write");
     }
     
-
+    printf("bytes written %d\n", res);
 
     /* first read loop -- read headers */
-    if ((res = minet_read(s, buf, sizeof(buf)-1) <= 0)){
+    
+    if ((res = minet_read(s, buf, sizeof(buf)-1) < 0)){
         minet_perror("Could not read");
     }
    
-    
-    printf("received: %s", buf);
+    printf("bytes read %d\n", res);
 
-    close(s);
+    
+    //printf("received: %s", buf);
+
+    
 
     /* examine return code */   
 
     //Skip "HTTP/1.0"
     //remove the '\0'
+    char return_code_buf[3];
+    return_code_buf[0] = buf[9];
+    return_code_buf[1] = buf[10];
+    return_code_buf[2] = buf[11];
+
+    int return_code = atoi(return_code_buf);
+    int error_code = 0;
+
+    if(return_code == 200)
+        error_code = 1;
+
+    printf("RETURN CODE : %d\n", return_code);
+
 
     // Normal reply has return code 200
 
     /* print first part of response: header, error code, etc. */
-
+    printf("%s", buf);
     /* second read loop -- print out the rest of the response: real web content */
 
-    /*close socket and deinitialize */
-
-    if (ok) {
-	return 0;
-    } else {
-	return -1;
+    while((res = minet_read(s, buf, sizeof(buf)-1)) > 0){
+        
+        printf("%s" , buf);
+        memset(buf, '\0', sizeof(buf));
     }
+    printf("\n");
+
+    /*close socket and deinitialize */
+    
+
+
+
+
+
+    close(s);
+    
+
+    if (error_code)
+	   return 0;
+    else
+	   return -1;
 }
