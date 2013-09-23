@@ -6,6 +6,7 @@
 
 #define BUFSIZE 1024
 #define FILENAMESIZE 100
+#define BACKLOG 5
 
 int handle_connection(int sock);
 long get_file_size(FILE * f);
@@ -14,8 +15,12 @@ int main(int argc, char * argv[]) {
     int server_port = -1;
     int rc          =  0;
     int sock        = -1;
-    int res, s, c, accepted_sock;
+	int res, s, c, accepted_sock, i;
+	socklen_t address_length;
     struct sockaddr_in saddr;
+
+	fd_set master_socket_list, temp_socket_list;
+	
     /* parse command line args */
     if (argc != 3) {
 	fprintf(stderr, "usage: http_server1 k|u port\n");
@@ -49,20 +54,62 @@ int main(int argc, char * argv[]) {
     }
 
     /* start listening */
-    if (minet_listen(s, 0) < 0)
+    if (minet_listen(s, BACKLOG) < 0)
     {
         minet_perror("Socket could not listen");
     }
 
     /* connection handling loop: wait to accept connection */    
-
+	
+	FD_ZERO(&master_socket_list);
+	FD_ZERO(&temp_socket_list);
+	
+	FD_SET(s, &master_socket_list);
+	
+	
     while(1) {
 	
 	/* create read list */
-	    if ((accepted_sock = minet_accept(s, &saddr)) > 0)
-        {
-            rc = handle_connection(accepted_sock);
-        }
+	temp_socket_list = master_socket_list;
+	
+	if (select(FD_SETSIZE, &temp_socket_list, NULL, NULL, NULL) < 0)
+	{
+		perror("select");
+		exit (EXIT_FAILURE);
+	}
+	
+	for (i = 0; i < FD_SETSIZE; i++)
+	{
+		if (FD_ISSET(i, &temp_socket_list))
+		{
+			if (i == s)
+			{
+				address_length = sizeof(saddr);
+				if ((accepted_sock = minet_accept(s, &saddr)) > 0)
+				{
+					/*if (accepted_sock > FD_SETSIZE)
+					{
+						
+					}*/
+					FD_SET(accepted_sock, &master_socket_list);
+					printf("New connection\n");
+				}
+				else
+				{
+					perror("Failure on accept");
+					exit(EXIT_FAILURE);
+				}
+				
+			}
+			else
+			{
+				rc = handle_connection(i);
+				FD_CLR(i, &master_socket_list);
+			}
+		}
+	}
+	
+	
 	/* do a select */
 	
 	/* process sockets that are ready */
