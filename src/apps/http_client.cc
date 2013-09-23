@@ -79,30 +79,15 @@ int main(int argc, char * argv[]) {
     }
     
 
-<<<<<<< HEAD
     //printf("bytes written %d\n", res);
 
 
     /* first read loop -- read headers */
     memset(buf, '\0', BUFSIZE);
-=======
-    printf("bytes written %d\n", res);
 
-
-    /* first read loop -- read headers */
-    
->>>>>>> 867102289970acab73f48a2242a0acf2e2e97b8a
     if ((res = minet_read(s, buf, sizeof(buf)-1) < 0)){
         minet_perror("Could not read");
     }
-
-<<<<<<< HEAD
-    //printf("bytes read %d\n", res);
-=======
-   
-    printf("bytes read %d\n", res);
->>>>>>> 867102289970acab73f48a2242a0acf2e2e97b8a
-
     
 
     /* examine return code */   
@@ -120,17 +105,10 @@ int main(int argc, char * argv[]) {
     if(return_code == 200)
         error_code = 1;
 
-<<<<<<< HEAD
-    //printf("RETURN CODE : %d\n", return_code);
-=======
-    printf("RETURN CODE : %d\n", return_code);
->>>>>>> 867102289970acab73f48a2242a0acf2e2e97b8a
-
 
     // Normal reply has return code 200
 
     /* print first part of response: header, error code, etc. */
-<<<<<<< HEAD
     printf("%s\n", buf);
     /* second read loop -- print out the rest of the response: real web content */
 
@@ -139,15 +117,6 @@ int main(int argc, char * argv[]) {
 	{
 		printf("%s" , buf);
         memset(buf, '\0', BUFSIZE);
-=======
-    printf("%s", buf);
-    /* second read loop -- print out the rest of the response: real web content */
-
-    while((res = minet_read(s, buf, sizeof(buf)-1)) > 0){
-        
-        printf("%s" , buf);
-        memset(buf, '\0', sizeof(buf));
->>>>>>> 867102289970acab73f48a2242a0acf2e2e97b8a
     }
     printf("\n");
 
@@ -158,8 +127,6 @@ int main(int argc, char * argv[]) {
 	   return 0;
     else
 	   return -1;
-<<<<<<< HEAD
-}
-=======
-}
->>>>>>> 867102289970acab73f48a2242a0acf2e2e97b8a
+
+}   
+
