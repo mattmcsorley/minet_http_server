@@ -42,28 +42,18 @@ int main(int argc, char * argv[]) {
 
     MinetInit(MINET_TCP_MODULE);
 
-    mux = MinetIsModuleInConfig(MINET_IP_MUX) ?  
-	MinetConnect(MINET_IP_MUX) : 
-	MINET_NOHANDLE;
+    mux = MinetIsModuleInConfig(MINET_IP_MUX) ? MinetConnect(MINET_IP_MUX) : MINET_NOHANDLE;
     
-    sock = MinetIsModuleInConfig(MINET_SOCK_MODULE) ? 
-	MinetAccept(MINET_SOCK_MODULE) : 
-	MINET_NOHANDLE;
+    sock = MinetIsModuleInConfig(MINET_SOCK_MODULE) ? MinetAccept(MINET_SOCK_MODULE) : MINET_NOHANDLE;
 
-    if ( (mux == MINET_NOHANDLE) && 
-	 (MinetIsModuleInConfig(MINET_IP_MUX)) ) {
-
-	MinetSendToMonitor(MinetMonitoringEvent("Can't connect to ip_mux"));
-
-	return -1;
+    if ( (mux == MINET_NOHANDLE) && (MinetIsModuleInConfig(MINET_IP_MUX)) ) {
+		MinetSendToMonitor(MinetMonitoringEvent("Can't connect to ip_mux"));
+		return -1;
     }
 
-    if ( (sock == MINET_NOHANDLE) && 
-	 (MinetIsModuleInConfig(MINET_SOCK_MODULE)) ) {
-
-	MinetSendToMonitor(MinetMonitoringEvent("Can't accept from sock_module"));
-
-	return -1;
+    if ( (sock == MINET_NOHANDLE) && (MinetIsModuleInConfig(MINET_SOCK_MODULE)) ) {
+		MinetSendToMonitor(MinetMonitoringEvent("Can't accept from sock_module"));
+		return -1;
     }
     
     cerr << "tcp_module STUB VERSION handling tcp traffic.......\n";
@@ -80,10 +70,82 @@ int main(int argc, char * argv[]) {
 	
 	    if (event.handle == mux) {
 		// ip packet has arrived!
+	    	printf("MUXXXXX \n");
+	    	Packet p;
+	    	unsigned char header_len;
+	    	unsigned short total_len;
+	    	unsigned char flags;
+	    	unsigned int ack_num;
+	    	unsigned int seq_num;
+	    	bool checksumok;
+	    	TCPHeader tcph;
+	    	IPHeader iph;
+
+	    	MinetReceive(mux,p);
+	    	//Esimate heaader length
+	    	header_len = TCPHeader::EstimateTCPHeaderLength(p);
+	    	//Extract header with header_length size
+	    	p.ExtractHeaderFromPayload<TCPHeader>(header_len);
+	    
+	    	
+	    	//Put tcp header into tcph
+	    	tcph = p.FindHeader(Headers::TCPHeader);
+	    	//Calulate checksum
+	    	checksumok=tcph.IsCorrectChecksum(p);
+	    	
+	    	//put IP header into iph
+	    	iph=p.FindHeader(Headers::IPHeader);
+	    	
+	    	Connection c;
+	    	//set connection variables
+	    	iph.GetDestIP(c.src);
+	    	iph.GetSourceIP(c.dest);
+	    	iph.GetProtocol(c.protocol);
+	    	tcph.GetDestPort(c.srcport);
+	    	tcph.GetSourcePort(c.destport);
+	    	//get tcp vars from tcp header
+	    	tcph.GetFlags(flags);
+	    	tcph.GetAckNum(ack_num);
+	    	tcph.GetSeqNum(seq_num);
+
+
+	    	ConnectionList<TCPState>::iterator cs = clist.FindMatching(c);
+	    	
+
+	    	if(cs != clist.end()) {
+	    		if(cs.GetState() == LISTEN)
+	    		{
+	    			printf("LISTEN");
+
+	    		}
+	    		else if((*cs).state.GetState() == CLOSED){
+	    			printf("CLOSED");
+
+	    		}
+	    		
+	    		
+	    		Buffer &data = p.GetPayload().ExtractFront(len);
+	    		SockRequestResponse write(WRITE, 
+	    				(*cs).connection,
+	    				data,
+	    				len,
+	    				EOK);
+	    		if(!checksumok) {
+	    			MinetSendToMonitor(MinetMonitoringEvent("forwarding packet to sock even though checksum failed"));
+	    		}
+	    	} else {
+	    		MinetSendToMonitor(MinetMonitoringEvent("Unknown port, sending ICMP error message"));
+	    		IPAddress source;
+	    		iph.GetSourceIP(source);
+	    		ICMPPacket error(source, DESTINATION_UNREACHABLE,PORT_UNREACHABLE,p);
+	    		MinetSendToMonitor(MinetMonitoringEvent("ICMP error message has been sent to host"));
+	    		MinetSend(mux,error);
+	    	}
 	    }
 
 	    if (event.handle == sock) {
 		// socket request or response has arrived
+	    	
 	    }
 	}
 
