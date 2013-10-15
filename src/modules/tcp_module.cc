@@ -25,19 +25,144 @@
 
 using namespace std;
 
-struct TCPState {
+struct TCPState;
+struct TCP;
+
+
+
+
+struct TCPState 
+{
     // need to write this
-    std::ostream & Print(std::ostream &os) const { 
-	os << "TCPState()" ; 
-	return os;
+	/*TCP outer;
+
+	TCPState(TCP out)
+	{
+		outer = out;
+	}*/
+
+    virtual void send(){}
+    virtual void receive(){}
+
+    std::ostream & Print(std::ostream &os) const 
+    { 
+		os << "TCPState()"; 
+		return os;
     }
 };
 
+struct TCP
+{
+	TCPState state;
+	unsigned int seq_num;
+	unsigned int ack_num;
+	unsigned char flags;
+	unsigned short sourcePort;
+	unsigned short destPort;
+	unsigned short winSize;
+	unsigned char headerLen;
+	unsigned char protocol;
+	IPAddress sourceIP;
+	IPAddress destIP;
+	unsigned short ipLen;
+	
+	void receive(TCPHeader tcph, IPHeader iph)
+	{
+		// Get TCP header values
+		tcph.GetFlags(flags);
+		tcph.GetAckNum(ack_num);
+		tcph.GetSeqNum(seq_num);
+		tcph.GetSourcePort(sourcePort);
+		tcph.GetDestPort(destport);
+		tcph.GetWinSize(winSize);
+		tcph.GetHeaderLen(headerLen);
 
-int main(int argc, char * argv[]) {
+		// Get IP header values
+
+		state.receive(tcph, iph);
+	}
+
+};
+
+struct TCPStateListen : TCPState
+{
+	void receive(TCPHeader tcph, IPHeader iph)
+	{
+		// Do setup of packets to send
+
+		if(IS_SYN(outer.flags))
+		{
+			Packet outgoing_packet;
+
+			tcph.SetSeqNum(300, outgoing_packet);
+			tcph.SetAckNum(outer.seq_num + 1, outgoing_packet);
+			tcph.SetWinSize(1024, outgoing_packet);
+
+		}
+
+
+		// Sent to minet.
+
+		// Change state.
+
+		outer.state = new TCPStateSynRecv(outer);
+
+	}
+};
+
+struct TCPStateEstablished : TCPState
+{
+	void receive(TCPHeader tcph, IPHeader iph)
+	{
+		// Do setup of packets to send
+
+		// Sent to minet.
+
+		//Change state.
+
+		outer.state = new TCPStateEstablished(outer);	
+
+	}
+};
+
+struct TCPStateSynRecv : TCPState
+{
+	void receive(TCPHeader tcph, IPHeader iph)
+	{
+		// Do setup of packets to send
+
+		// Sent to minet.
+
+		//Change state.
+
+		outer.state = new TCPStateEstablished(outer);	
+
+	}
+};
+
+struct TCPStateSynSent : TCPState
+{
+	void receive(TCPHeader tcph, IPHeader iph)
+	{
+		// Do setup of packets to send
+
+		// Sent to minet.
+
+		// Change state.
+
+		outer.state = new TCPStateEstablished(outer);	
+
+	}
+};
+
+
+
+
+int main(int argc, char * argv[]) 
+{
     MinetHandle mux;
     MinetHandle sock;
-    
+   
     ConnectionList<TCPState> clist;
 
     MinetInit(MINET_TCP_MODULE);
@@ -46,12 +171,14 @@ int main(int argc, char * argv[]) {
     
     sock = MinetIsModuleInConfig(MINET_SOCK_MODULE) ? MinetAccept(MINET_SOCK_MODULE) : MINET_NOHANDLE;
 
-    if ( (mux == MINET_NOHANDLE) && (MinetIsModuleInConfig(MINET_IP_MUX)) ) {
+    if ((mux == MINET_NOHANDLE) && (MinetIsModuleInConfig(MINET_IP_MUX))) 
+    {
 		MinetSendToMonitor(MinetMonitoringEvent("Can't connect to ip_mux"));
 		return -1;
     }
 
-    if ( (sock == MINET_NOHANDLE) && (MinetIsModuleInConfig(MINET_SOCK_MODULE)) ) {
+    if ((sock == MINET_NOHANDLE) && (MinetIsModuleInConfig(MINET_SOCK_MODULE))) 
+    {
 		MinetSendToMonitor(MinetMonitoringEvent("Can't accept from sock_module"));
 		return -1;
     }
@@ -63,95 +190,88 @@ int main(int argc, char * argv[]) {
     MinetEvent event;
     double timeout = 1;
 
-    while (MinetGetNextEvent(event, timeout) == 0) {
+    // Server initial state
+    TCP initServerState;
+    TCPStateListen listenState;
 
-	if ((event.eventtype == MinetEvent::Dataflow) && 
-	    (event.direction == MinetEvent::IN)) {
-	
-	    if (event.handle == mux) {
-		// ip packet has arrived!
-	    	printf("MUXXXXX \n");
-	    	Packet p;
-	    	unsigned char header_len;
-	    	unsigned short total_len;
-	    	unsigned char flags;
-	    	unsigned int ack_num;
-	    	unsigned int seq_num;
-	    	bool checksumok;
-	    	TCPHeader tcph;
-	    	IPHeader iph;
-
-	    	MinetReceive(mux,p);
-	    	//Esimate heaader length
-	    	header_len = TCPHeader::EstimateTCPHeaderLength(p);
-	    	//Extract header with header_length size
-	    	p.ExtractHeaderFromPayload<TCPHeader>(header_len);
-	    
-	    	
-	    	//Put tcp header into tcph
-	    	tcph = p.FindHeader(Headers::TCPHeader);
-	    	//Calulate checksum
-	    	checksumok=tcph.IsCorrectChecksum(p);
-	    	
-	    	//put IP header into iph
-	    	iph=p.FindHeader(Headers::IPHeader);
-	    	
-	    	Connection c;
-	    	//set connection variables
-	    	iph.GetDestIP(c.src);
-	    	iph.GetSourceIP(c.dest);
-	    	iph.GetProtocol(c.protocol);
-	    	tcph.GetDestPort(c.srcport);
-	    	tcph.GetSourcePort(c.destport);
-	    	//get tcp vars from tcp header
-	    	tcph.GetFlags(flags);
-	    	tcph.GetAckNum(ack_num);
-	    	tcph.GetSeqNum(seq_num);
+    initServerState.state = listenState; 
 
 
-	    	ConnectionList<TCPState>::iterator cs = clist.FindMatching(c);
-	    	
+    // Server initial state
+    /*
+    */
 
-	    	if(cs != clist.end()) {
-	    		if(cs.GetState() == LISTEN)
-	    		{
-	    			printf("LISTEN");
+    while (MinetGetNextEvent(event, timeout) == 0) 
+    {
 
-	    		}
-	    		else if((*cs).state.GetState() == CLOSED){
-	    			printf("CLOSED");
+		if ((event.eventtype == MinetEvent::Dataflow) && (event.direction == MinetEvent::IN)) 
+		{
+		
+		    if (event.handle == mux) 
+		    {
+				// ip packet has arrived!
+		    	printf("MUXXXXX \n");
+		    	Packet p;
+		    	unsigned char header_len;
+		    	unsigned short total_len;
+		    	bool checksumok;
+		    	TCPHeader tcph;
+		    	IPHeader iph;
 
-	    		}
-	    		
-	    		
-	    		Buffer &data = p.GetPayload().ExtractFront(len);
-	    		SockRequestResponse write(WRITE, 
-	    				(*cs).connection,
-	    				data,
-	    				len,
-	    				EOK);
-	    		if(!checksumok) {
-	    			MinetSendToMonitor(MinetMonitoringEvent("forwarding packet to sock even though checksum failed"));
-	    		}
-	    	} else {
-	    		MinetSendToMonitor(MinetMonitoringEvent("Unknown port, sending ICMP error message"));
-	    		IPAddress source;
-	    		iph.GetSourceIP(source);
-	    		ICMPPacket error(source, DESTINATION_UNREACHABLE,PORT_UNREACHABLE,p);
-	    		MinetSendToMonitor(MinetMonitoringEvent("ICMP error message has been sent to host"));
-	    		MinetSend(mux,error);
-	    	}
-	    }
+		    	MinetReceive(mux,p);
+		    	//Esimate heaader length
+		    	header_len = TCPHeader::EstimateTCPHeaderLength(p);
+		    	//Extract header with header_length size
+		    	p.ExtractHeaderFromPayload<TCPHeader>(header_len);
+		    
+		    	
+		    	//Put tcp header into tcph
+		    	tcph = p.FindHeader(Headers::TCPHeader);
+		    	//Calulate checksum
+		    	checksumok=tcph.IsCorrectChecksum(p);
+		    	
+		    	//put IP header into iph
+		    	iph=p.FindHeader(Headers::IPHeader);
+		    	
+		    	Connection c;
+		    	// set connection variables
+		    	iph.GetDestIP(c.src);
+		    	iph.GetSourceIP(c.dest);
+		    	iph.GetProtocol(c.protocol);
+		    	tcph.GetDestPort(c.srcport);
+		    	tcph.GetSourcePort(c.destport);
+		    	
 
-	    if (event.handle == sock) {
-		// socket request or response has arrived
-	    	
-	    }
-	}
 
-	if (event.eventtype == MinetEvent::Timeout) {
-	    // timeout ! probably need to resend some packets
-	}
+		    	ConnectionList<TCP>::iterator cs = clist.FindMatching(c);
+		    	
+
+		    	if(cs != clist.end()) 
+		    	{
+		    		cs.receive(tcph, iph);
+		    	}
+		    	else
+		    	{
+		    		MinetSendToMonitor(MinetMonitoringEvent("Unknown port, sending ICMP error message"));
+		    		IPAddress source;
+		    		iph.GetSourceIP(source);
+		    		ICMPPacket error(source, DESTINATION_UNREACHABLE,PORT_UNREACHABLE,p);
+		    		MinetSendToMonitor(MinetMonitoringEvent("ICMP error message has been sent to host"));
+		    		MinetSend(mux,error);
+		    	}
+		    }
+
+		    if (event.handle == sock) 
+		    {
+				// socket request or response has arrived
+		    	
+		    }
+		}
+
+		if (event.eventtype == MinetEvent::Timeout) 
+		{
+		    // timeout ! probably need to resend some packets
+		}
 
     }
 
