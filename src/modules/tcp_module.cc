@@ -45,6 +45,7 @@ struct TCP
 	IPAddress sourceIP;
 	IPAddress destIP;
 	unsigned short ipLen;
+	Packet outgoing_packet;
 
 
 	TCP();
@@ -117,6 +118,7 @@ Packet* TCP::receive(Packet p){
 	printf("TCP receive\n");
 	IPHeader iph;
 	TCPHeader tcph;
+	Packet * ret_val;
 
 	tcph = p.FindHeader(Headers::TCPHeader);
 	tcph.GetSeqNum(seq_num);
@@ -125,7 +127,7 @@ Packet* TCP::receive(Packet p){
 	cout << tcph << endl;
 	tcph.GetSourcePort(this->sourcePort);
 	tcph.GetDestPort(this->destPort);
-	cout << "dest port: " << destPort << ", " << sourcePort << endl;
+	cout << "dest port: " << destPort << ", source port: " << sourcePort << endl;
 	tcph.GetWinSize(winSize);
 
 	//cout << tcph << endl;
@@ -136,7 +138,12 @@ Packet* TCP::receive(Packet p){
 	iph.GetProtocol(protocol);
 	iph.GetHeaderLength(ipHeaderLen);
 
-	return state->receive();
+	
+	
+	ret_val = state->receive();
+	//cout << "Recieve packet in right before return in TCPRecieve: " << ret_val << endl;
+	//cout << "Deferenced recieve packet in right before return in TCPRecieve: " << *ret_val << endl;
+	return ret_val;
 }
 
 Packet* TCPState::receive(){
@@ -161,43 +168,49 @@ TCPStateSynRecv::TCPStateSynRecv(TCP *out) : TCPState(out) {}
 
 Packet* TCPStateSynRecv::receive()
 {
-	return new Packet();
+	cout << "Hello from SynRecv!" << endl;
+	return NULL;
 }
+
 Packet* TCPStateListen::receive()
 {
 	printf("TCPStateListen received\n");
 	printf("source test : %d\n", (*outer).sourcePort);
 	printf("dest test : %d\n", (*outer).destPort);
 	Packet *ret_val = NULL;
+	unsigned char outgoing_flags = 0;
 
 	if(IS_SYN(outer->flags))
 	{
 		cout << "IS_SYN" << endl;
-		Packet outgoing_packet;
 		IPHeader iph;
 		TCPHeader tcph;
 
 		iph.SetProtocol(outer->protocol);
-		iph.SetSourceIP(outer->sourceIP);
-		iph.SetDestIP(outer->destIP);
+		iph.SetSourceIP(outer->destIP);
+		iph.SetDestIP(outer->sourceIP);
 		iph.SetTotalLength(IP_HEADER_BASE_LENGTH + TCP_HEADER_BASE_LENGTH);
-		outgoing_packet.PushFrontHeader(iph);
+		outer->outgoing_packet.PushFrontHeader(iph);
 
-		tcph.SetSourcePort(outer->sourcePort,outgoing_packet);
-        tcph.SetDestPort(outer->destPort,outgoing_packet);
-        tcph.SetFlags(outer->flags,outgoing_packet);  
-        tcph.SetSeqNum(outer->ack_num,outgoing_packet);   
-        tcph.SetAckNum(outer->seq_num + 1,outgoing_packet);    
-        tcph.SetWinSize(outer->winSize,outgoing_packet);
-        tcph.SetHeaderLen(TCP_HEADER_BASE_LENGTH,outgoing_packet);
-        outgoing_packet.PushBackHeader(tcph);		
+		tcph.SetSourcePort(outer->destPort,outer->outgoing_packet);
+        tcph.SetDestPort(outer->sourcePort,outer->outgoing_packet);
+        SET_ACK(outgoing_flags);
+        SET_SYN(outgoing_flags);
+        tcph.SetFlags(outgoing_flags,outer->outgoing_packet);  
+        tcph.SetSeqNum(outer->ack_num,outer->outgoing_packet);   
+        tcph.SetAckNum(outer->seq_num + 1,outer->outgoing_packet);    
+        tcph.SetWinSize(outer->winSize,outer->outgoing_packet);
+        tcph.SetHeaderLen(TCP_HEADER_BASE_LENGTH,outer->outgoing_packet);
+        outer->outgoing_packet.PushBackHeader(tcph);		
 
 
 		outer->state = new TCPStateSynRecv(outer);
-		ret_val = &outgoing_packet;
+		ret_val = &(outer->outgoing_packet);
 	}
 
 	cout << "Returning outgoing packet" << endl;
+	//cout << "Recieve packet in right before return in ListenRecieve: " << ret_val << endl;
+	//cout << "Dereferenced recieve packet in right before return in ListenRecieve: " << *ret_val << endl;
 	return ret_val;
 }
 
@@ -313,7 +326,13 @@ int main(int argc, char * argv[])
 		    		if (receive_packet != NULL)
 		    		{
 		    			cout << "Sending in mux" << endl;
-		    			MinetSend(mux,*receive_packet);
+		    			cout << "Recieve packet in right before send: " << receive_packet << endl;
+		    			cout << "Dereferenced recieve packet in right before send: " << *receive_packet << endl;
+
+		    			cout << "Outgoing packet from TCP class: " << (*cs).state->outgoing_packet << endl;
+		    			MinetSend(mux,(*cs).state->outgoing_packet);
+		    			sleep(3);
+		    			MinetSend(mux,(*cs).state->outgoing_packet);
 		    			cout << "Sent" << endl;
 		    		}
 		    	}
