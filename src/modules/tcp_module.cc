@@ -45,12 +45,12 @@ struct TCP
 	IPAddress sourceIP;
 	IPAddress destIP;
 	unsigned short ipLen;
-	Packet outgoing_packet;
+	//Packet outgoing_packet;
 
 
 	TCP();
 	
-	Packet* receive(Packet p);
+	void receive(Packet p, MinetHandle* mux);
 	
 };
 
@@ -61,7 +61,7 @@ struct TCPState
 	TCPState(TCP * out);
 
     virtual void send(){}
-    virtual Packet* receive();
+    virtual void receive(MinetHandle* mux);
 
     std::ostream & Print(std::ostream &os) const 
     { 
@@ -74,7 +74,7 @@ struct TCPState
 struct TCPStateListen : TCPState
 {
 	TCPStateListen(TCP * out);
-	Packet* receive();	
+	void receive(MinetHandle* mux);
 };
 
 /*
@@ -96,7 +96,7 @@ struct TCPStateEstablished : TCPState
 struct TCPStateSynRecv : TCPState
 {
 	TCPStateSynRecv(TCP * out);
-	Packet* receive();
+	void receive(MinetHandle* mux);
 };
 /*
 struct TCPStateSynSent : TCPState
@@ -114,11 +114,10 @@ struct TCPStateSynSent : TCPState
 	}
 };
 */
-Packet* TCP::receive(Packet p){
+void TCP::receive(Packet p, MinetHandle* mux){
 	printf("TCP receive\n");
 	IPHeader iph;
 	TCPHeader tcph;
-	Packet * ret_val;
 
 	tcph = p.FindHeader(Headers::TCPHeader);
 	tcph.GetSeqNum(seq_num);
@@ -140,15 +139,10 @@ Packet* TCP::receive(Packet p){
 
 	
 	
-	ret_val = state->receive();
-	//cout << "Recieve packet in right before return in TCPRecieve: " << ret_val << endl;
-	//cout << "Deferenced recieve packet in right before return in TCPRecieve: " << *ret_val << endl;
-	return ret_val;
+	state->receive(mux);
 }
 
-Packet* TCPState::receive(){
-	return new Packet();
-}
+void TCPState::receive(MinetHandle* mux){}
 
 TCP::TCP()
 {
@@ -166,18 +160,16 @@ TCPState::TCPState(TCP * out)
 TCPStateListen::TCPStateListen(TCP *out) : TCPState(out) {}
 TCPStateSynRecv::TCPStateSynRecv(TCP *out) : TCPState(out) {}
 
-Packet* TCPStateSynRecv::receive()
+void TCPStateSynRecv::receive(MinetHandle* mux)
 {
 	cout << "Hello from SynRecv!" << endl;
-	return NULL;
 }
 
-Packet* TCPStateListen::receive()
+void TCPStateListen::receive(MinetHandle* mux)
 {
 	printf("TCPStateListen received\n");
 	printf("source test : %d\n", (*outer).sourcePort);
 	printf("dest test : %d\n", (*outer).destPort);
-	Packet *ret_val = NULL;
 	unsigned char outgoing_flags = 0;
 
 	if(IS_SYN(outer->flags))
@@ -185,33 +177,36 @@ Packet* TCPStateListen::receive()
 		cout << "IS_SYN" << endl;
 		IPHeader iph;
 		TCPHeader tcph;
+		Packet outgoing_packet;
 
 		iph.SetProtocol(outer->protocol);
 		iph.SetSourceIP(outer->destIP);
 		iph.SetDestIP(outer->sourceIP);
 		iph.SetTotalLength(IP_HEADER_BASE_LENGTH + TCP_HEADER_BASE_LENGTH);
-		outer->outgoing_packet.PushFrontHeader(iph);
+		outgoing_packet.PushFrontHeader(iph);
 
-		tcph.SetSourcePort(outer->destPort,outer->outgoing_packet);
-        tcph.SetDestPort(outer->sourcePort,outer->outgoing_packet);
+		tcph.SetSourcePort(outer->destPort,outgoing_packet);
+        tcph.SetDestPort(outer->sourcePort,outgoing_packet);
         SET_ACK(outgoing_flags);
         SET_SYN(outgoing_flags);
-        tcph.SetFlags(outgoing_flags,outer->outgoing_packet);  
-        tcph.SetSeqNum(outer->ack_num,outer->outgoing_packet);   
-        tcph.SetAckNum(outer->seq_num + 1,outer->outgoing_packet);    
-        tcph.SetWinSize(outer->winSize,outer->outgoing_packet);
-        tcph.SetHeaderLen(TCP_HEADER_BASE_LENGTH,outer->outgoing_packet);
-        outer->outgoing_packet.PushBackHeader(tcph);		
+        tcph.SetFlags(outgoing_flags,outgoing_packet);  
+        tcph.SetSeqNum(outer->ack_num,outgoing_packet);   
+        tcph.SetAckNum(outer->seq_num + 1,outgoing_packet);    
+        tcph.SetWinSize(outer->winSize,outgoing_packet);
+        tcph.SetHeaderLen(TCP_HEADER_BASE_LENGTH,outgoing_packet);
+        outgoing_packet.PushBackHeader(tcph);		
 
-
+        MinetSend(*mux, outgoing_packet);
+        sleep(3);
+        MinetSend(*mux, outgoing_packet);
 		outer->state = new TCPStateSynRecv(outer);
-		ret_val = &(outer->outgoing_packet);
+		//ret_val = &(outer->outgoing_packet);
 	}
 
 	cout << "Returning outgoing packet" << endl;
 	//cout << "Recieve packet in right before return in ListenRecieve: " << ret_val << endl;
 	//cout << "Dereferenced recieve packet in right before return in ListenRecieve: " << *ret_val << endl;
-	return ret_val;
+	//return ret_val;
 }
 
 int main(int argc, char * argv[]) 
@@ -298,12 +293,12 @@ int main(int argc, char * argv[])
 		    	//printf("test1\n");
 
 				ConnectionToStateMapping<TCP *> * a = new ConnectionToStateMapping<TCP *>();
-				printf("test1\n");
+				/*printf("test1\n");
 				printf("test2\n");
 				printf("test3\n");
 				printf("test4\n");
 				printf("test5\n");
-				printf("test6\n");
+				printf("test6\n");*/
 				Connection *conn = new Connection();
 				conn->src = c.src;
 				conn->dest = c.dest;
@@ -319,22 +314,19 @@ int main(int argc, char * argv[])
 
 		    	if(cs != clist.end()) 
 		    	{
-		    		Packet *receive_packet;
+		    		//Packet *receive_packet;
 		    		printf("cs\n");
-		    		receive_packet = (*cs).state->receive(p);
+		    		(*cs).state->receive(p, &mux);
 
-		    		if (receive_packet != NULL)
-		    		{
-		    			cout << "Sending in mux" << endl;
-		    			cout << "Recieve packet in right before send: " << receive_packet << endl;
-		    			cout << "Dereferenced recieve packet in right before send: " << *receive_packet << endl;
+	    			/*cout << "Sending in mux" << endl;
+	    			cout << "Recieve packet in right before send: " << receive_packet << endl;
+	    			cout << "Dereferenced recieve packet in right before send: " << *receive_packet << endl;
 
-		    			cout << "Outgoing packet from TCP class: " << (*cs).state->outgoing_packet << endl;
-		    			MinetSend(mux,(*cs).state->outgoing_packet);
-		    			sleep(3);
-		    			MinetSend(mux,(*cs).state->outgoing_packet);
-		    			cout << "Sent" << endl;
-		    		}
+	    			cout << "Outgoing packet from TCP class: " << (*cs).state->outgoing_packet << endl;
+	    			MinetSend(mux,(*cs).state->outgoing_packet);
+	    			sleep(3);
+	    			MinetSend(mux,(*cs).state->outgoing_packet);*/
+	    			cout << "Sent" << endl;
 		    	}
 		    	else
 		    	{
