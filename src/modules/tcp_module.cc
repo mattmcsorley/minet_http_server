@@ -162,7 +162,10 @@ TCPStateSynRecv::TCPStateSynRecv(TCP *out) : TCPState(out) {}
 
 void TCPStateSynRecv::receive(MinetHandle* mux)
 {
-	cout << "Hello from SynRecv!" << endl;
+	if(IS_ACK(outer-flags))
+	{
+		outer-state = new TCPStateEstablished(outer);
+	}
 }
 
 void TCPStateListen::receive(MinetHandle* mux)
