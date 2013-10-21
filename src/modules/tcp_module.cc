@@ -148,7 +148,7 @@ void TCPStateSynSent::receive(MinetHandle* mux){
 	
 	cout << "TCPStateSynSent::receive" << endl;
 	unsigned char outgoing_flags = 0;
-	Buffer *buff = new Buffer("Hello" , 5);
+	//Buffer *buff = new Buffer("Hello" , 5);
 
 	
 	if(IS_SYN(outer->flags) && IS_ACK(outer->flags)){
@@ -157,18 +157,22 @@ void TCPStateSynSent::receive(MinetHandle* mux){
 		cout << "IS_SYN & IS_ACK" << endl;
 		IPHeader iph;
 		TCPHeader tcph;
-		Packet outgoing_packet(*buff);
+		//Packet outgoing_packet(*buff);
+		Packet outgoing_packet;
 
 		iph.SetProtocol(outer->protocol);
 		iph.SetSourceIP(outer->destIP);
 		iph.SetDestIP(outer->sourceIP);
-		iph.SetTotalLength(IP_HEADER_BASE_LENGTH + TCP_HEADER_BASE_LENGTH + (*buff).GetSize());
+		//iph.SetTotalLength(IP_HEADER_BASE_LENGTH + TCP_HEADER_BASE_LENGTH + (*buff).GetSize());
+		iph.SetTotalLength(IP_HEADER_BASE_LENGTH + TCP_HEADER_BASE_LENGTH);
 		outgoing_packet.PushFrontHeader(iph);
 
 		tcph.SetSourcePort(outer->destPort,outgoing_packet);
         tcph.SetDestPort(outer->sourcePort,outgoing_packet);
         SET_ACK(outgoing_flags);
-        tcph.SetFlags(outgoing_flags,outgoing_packet);  
+        tcph.SetFlags(outgoing_flags,outgoing_packet);
+        cout << "Setting seq_num to : " << outer->ack_num << endl;
+        cout << "Setting ack_num to : " << outer->seq_num + 1 << endl;
         tcph.SetSeqNum(outer->ack_num,outgoing_packet);   
         tcph.SetAckNum(outer->seq_num + 1,outgoing_packet);    
         tcph.SetWinSize(outer->winSize,outgoing_packet);
@@ -178,8 +182,8 @@ void TCPStateSynSent::receive(MinetHandle* mux){
 
 
         MinetSend(*mux, outgoing_packet);
-        sleep(3);
-        MinetSend(*mux, outgoing_packet);
+        //sleep(3);
+        //MinetSend(*mux, outgoing_packet);
 		outer->state = new TCPStateEstablished(outer);
 	}
 
@@ -276,43 +280,47 @@ int main(int argc, char * argv[])
 
     
     // Server initial state
-    //printf("Initializing Server");
-	//TCP initState;
-	//TCPStateListen listenState(&initState);
-	//initState.state = &listenState;
+    /*
+    printf("Initializing Server");
+	TCP initState;
+	TCPStateListen listenState(&initState);
+	initState.state = &listenState;
+	*/
 	
 
      //Client initial state
+    ///*
     printf("Intializing Client");
     TCP initState;
     TCPStateSynSent synSentState(&initState);
     initState.state = &synSentState;
 
 
-    	IPHeader iph;
-		TCPHeader tcph;
-		Packet outgoing_packet;
-		IPAddress *source = new IPAddress("192.168.126.15");
-		IPAddress *dest = new IPAddress("192.168.42.17");
-		unsigned char flags = 0;
-		iph.SetProtocol(IP_PROTO_TCP);
-		iph.SetSourceIP(*source);
-		iph.SetDestIP(*dest);
-		iph.SetTotalLength(IP_HEADER_BASE_LENGTH + TCP_HEADER_BASE_LENGTH);
-		outgoing_packet.PushFrontHeader(iph);
+	IPHeader iph;
+	TCPHeader tcph;
+	Packet outgoing_packet;
+	IPAddress *source = new IPAddress("192.168.126.15");
+	IPAddress *dest = new IPAddress("192.168.42.11");
+	unsigned char flags = 0;
+	iph.SetProtocol(IP_PROTO_TCP);
+	iph.SetSourceIP(*source);
+	iph.SetDestIP(*dest);
+	iph.SetTotalLength(IP_HEADER_BASE_LENGTH + TCP_HEADER_BASE_LENGTH);
+	outgoing_packet.PushFrontHeader(iph);
 
-		tcph.SetSourcePort(2020,outgoing_packet);
-        tcph.SetDestPort(5051,outgoing_packet);
-        SET_SYN(flags);
-        tcph.SetFlags(flags,outgoing_packet);  
-        tcph.SetSeqNum(100,outgoing_packet);     
-        tcph.SetWinSize(5840,outgoing_packet);
-        tcph.SetHeaderLen(TCP_HEADER_BASE_LENGTH,outgoing_packet);
-        outgoing_packet.PushBackHeader(tcph);		
+	tcph.SetSourcePort(2020,outgoing_packet);
+    tcph.SetDestPort(5053,outgoing_packet);
+    SET_SYN(flags);
+    tcph.SetFlags(flags,outgoing_packet);  
+    tcph.SetSeqNum(100,outgoing_packet);     
+    tcph.SetWinSize(5840,outgoing_packet);
+    tcph.SetHeaderLen(TCP_HEADER_BASE_LENGTH,outgoing_packet);
+    outgoing_packet.PushBackHeader(tcph);		
 
-        MinetSend(mux, outgoing_packet);
-        sleep(3);
-        MinetSend(mux, outgoing_packet);
+    MinetSend(mux, outgoing_packet);
+    sleep(3);
+    MinetSend(mux, outgoing_packet);
+    //*/
 
 
 
