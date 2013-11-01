@@ -110,16 +110,18 @@ void TCPHeader::SetAckNum(const unsigned int &n, const Packet &p)
 void TCPHeader::GetHeaderLen(unsigned char &len) const
 {
     GetData((char *)&len, 1, 12);
-    len = (len & 0xf0) >> 2;
-
+    len = (len >> 4) & 0xf;
 }
 
 void TCPHeader::SetHeaderLen(const unsigned char &new_len, const Packet &p)
 {
   unsigned char tmp_len;
+  
+  unsigned char tmp2 = new_len;
+  tmp2 >>= 2;
 
   GetData((char *)&tmp_len, 1, 12);
-  tmp_len = (tmp_len & 0x0f) | ((new_len << 2) & 0xf0);
+  tmp_len = (tmp_len & 0x0f) | ((tmp2 << 4) & 0xf0);
   SetData((char *)&tmp_len, 1, 12);
 
   RecomputeChecksum(p);
