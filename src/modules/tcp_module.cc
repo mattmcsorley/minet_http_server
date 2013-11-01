@@ -234,8 +234,8 @@ void TCPStateListen::receive(MinetHandle* mux)
         outgoing_packet.PushBackHeader(tcph);		
 
         MinetSend(*mux, outgoing_packet);
-        sleep(3);
-        MinetSend(*mux, outgoing_packet);
+        //sleep(3);
+        //MinetSend(*mux, outgoing_packet);
 		outer->state = new TCPStateSynRecv(outer);
 		//ret_val = &(outer->outgoing_packet);
 	}
@@ -245,6 +245,21 @@ void TCPStateListen::receive(MinetHandle* mux)
 	//cout << "Dereferenced recieve packet in right before return in ListenRecieve: " << *ret_val << endl;
 	//return ret_val;
 }
+
+void addConnection(ConnectionList<TCP *> *clist, Connection *c, TCP *initState)
+{
+	ConnectionToStateMapping<TCP *> * a = new ConnectionToStateMapping<TCP *>();
+	Connection *conn = new Connection();
+	conn->src = c->src;
+	conn->dest = c->dest;
+	conn->protocol = c->protocol;
+	conn->srcport = c->srcport;
+	conn->destport = c->destport;
+	a->connection = *conn;
+	a->state = initState; 
+	clist->push_back(*a);
+}
+
 
 int main(int argc, char * argv[]) 
 {
@@ -280,16 +295,15 @@ int main(int argc, char * argv[])
 
     
     // Server initial state
-    /*
-    printf("Initializing Server");
+    /*printf("Initializing Server");
 	TCP initState;
 	TCPStateListen listenState(&initState);
-	initState.state = &listenState;
-	*/
+	initState.state = &listenState;*/
+	
 	
 
      //Client initial state
-    ///*
+    
     printf("Intializing Client");
     TCP initState;
     TCPStateSynSent synSentState(&initState);
@@ -300,7 +314,7 @@ int main(int argc, char * argv[])
 	TCPHeader tcph;
 	Packet outgoing_packet;
 	IPAddress *source = new IPAddress("192.168.126.15");
-	IPAddress *dest = new IPAddress("192.168.42.11");
+	IPAddress *dest = new IPAddress("192.168.42.16");
 	unsigned char flags = 0;
 	iph.SetProtocol(IP_PROTO_TCP);
 	iph.SetSourceIP(*source);
@@ -320,10 +334,7 @@ int main(int argc, char * argv[])
     MinetSend(mux, outgoing_packet);
     sleep(3);
     MinetSend(mux, outgoing_packet);
-    //*/
-
-
-
+    
 
     while (MinetGetNextEvent(event, timeout) == 0) 
     {
@@ -365,13 +376,8 @@ int main(int argc, char * argv[])
 		    	tcph.GetSourcePort(c.destport);
 		    	//printf("test1\n");
 
-				ConnectionToStateMapping<TCP *> * a = new ConnectionToStateMapping<TCP *>();
-				/*printf("test1\n");
-				printf("test2\n");
-				printf("test3\n");
-				printf("test4\n");
-				printf("test5\n");
-				printf("test6\n");*/
+		    	addConnection(&clist, &c, &initState);
+				/*ConnectionToStateMapping<TCP *> * a = new ConnectionToStateMapping<TCP *>();
 				Connection *conn = new Connection();
 				conn->src = c.src;
 				conn->dest = c.dest;
@@ -380,7 +386,7 @@ int main(int argc, char * argv[])
 				conn->destport = c.destport;
 				a->connection = *conn;
 				a->state = &initState; 
-		    	clist.push_back(*a);
+		    	clist.push_back(*a);*/
 
 		    	ConnectionList<TCP *>::iterator cs = clist.FindMatching(c);
 		    	
@@ -414,6 +420,48 @@ int main(int argc, char * argv[])
 
 		    if (event.handle == sock) 
 		    {
+		    	SockRequestResponse req;
+		    	MinetReceive(sock, req);
+
+		    	switch (req.type)
+		    	{
+		    		case CONNECT:
+		    		{
+		    			cout << "CONNECT" << endl;
+		    			break;
+		    		}
+		    		case ACCEPT:
+		    		{
+		    			cout << "ACCEPT" << endl;
+		    			break;
+		    		}
+		    		case STATUS:
+		    		{
+		    			cout << "STATUS" << endl;
+		    			break;
+		    		}
+		    		case WRITE:
+		    		{
+		    			cout << "WRITE" << endl;
+		    			break;
+		    		}
+		    		case FORWARD:
+		    		{
+		    			cout << "FORWARD" << endl;
+		    			break;
+		    		}
+		    		case CLOSE:
+		    		{
+		    			cout << "CLOSE" << endl;
+		    			break;
+		    		}
+		    		default:
+		    		{
+		    			cout << "DEFAULT" << endl;
+		    			break;
+		    		}
+		    	}
+
 				// socket request or response has arrived
 		    	
 		    }
