@@ -50,8 +50,8 @@ struct TCP
 
 	TCP();
 	
-	void receive(Packet p, MinetHandle* mux);
-	
+	void receive(Packet p, MinetHandle* mux, MinetHandle* sock);
+	void send(Buffer* buf, MinetHandle* mux);
 };
 
 struct TCPState 
@@ -60,8 +60,8 @@ struct TCPState
 	TCP * outer;
 	TCPState(TCP * out);
 
-    virtual void send(){}
-    virtual void receive(MinetHandle* mux);
+    virtual void send(Buffer* buf, MinetHandle* mux);
+    virtual void receive(MinetHandle* mux, MinetHandle* sock);
 
     std::ostream & Print(std::ostream &os) const 
     { 
@@ -74,29 +74,30 @@ struct TCPState
 struct TCPStateListen : TCPState
 {
 	TCPStateListen(TCP * out);
-	void receive(MinetHandle* mux);
+	void receive(MinetHandle* mux, MinetHandle* sock);
 };
 
 
 struct TCPStateEstablished : TCPState
 {
 	TCPStateEstablished(TCP * out);
-	void receive(MinetHandle* mux);
+	void receive(MinetHandle* mux, MinetHandle* sock);
+	
 };
 
 struct TCPStateSynRecv : TCPState
 {
 	TCPStateSynRecv(TCP * out);
-	void receive(MinetHandle* mux);
+	void receive(MinetHandle* mux, MinetHandle* sock);
 };
 
 struct TCPStateSynSent : TCPState
 {
 	TCPStateSynSent(TCP * out);
-	void receive(MinetHandle* mux);
+	void receive(MinetHandle* mux, MinetHandle* sock);
 };
 
-void TCP::receive(Packet p, MinetHandle* mux){
+void TCP::receive(Packet p, MinetHandle* mux, MinetHandle* sock){
 	printf("TCP receive\n");
 	IPHeader iph;
 	TCPHeader tcph;
@@ -121,11 +122,16 @@ void TCP::receive(Packet p, MinetHandle* mux){
 
 	
 	
-	state->receive(mux);
+	state->receive(mux,sock);
 }
+void TCP::send(Buffer* buf, MinetHandle* mux){
+	// send data packet 
+	cout << "TCP::send()" << endl;
+	//need to fill in.
 
-void TCPState::receive(MinetHandle* mux){}
-
+}
+void TCPState::receive(MinetHandle* mux, MinetHandle* sock){}
+void TCPState::send(Buffer* buf, MinetHandle* mux){}
 TCP::TCP()
 {
 		ack_num = 300;
@@ -144,7 +150,7 @@ TCPStateSynRecv::TCPStateSynRecv(TCP *out) : TCPState(out) {}
 TCPStateEstablished::TCPStateEstablished(TCP *out) : TCPState(out) {}
 TCPStateSynSent::TCPStateSynSent(TCP *out) : TCPState(out) {}
 
-void TCPStateSynSent::receive(MinetHandle* mux){
+void TCPStateSynSent::receive(MinetHandle* mux, MinetHandle* sock){
 	
 	cout << "TCPStateSynSent::receive" << endl;
 	unsigned char outgoing_flags = 0;
@@ -179,22 +185,31 @@ void TCPStateSynSent::receive(MinetHandle* mux){
         tcph.SetHeaderLen(TCP_HEADER_BASE_LENGTH,outgoing_packet);
         outgoing_packet.PushBackHeader(tcph);		
 
-
-
         MinetSend(*mux, outgoing_packet);
-        //sleep(3);
-        //MinetSend(*mux, outgoing_packet);
+        
+
+        Connection c(outer->destIP, outer->sourceIP, outer->destPort, outer->sourcePort, outer->protocol);
+        Buffer empty;
+        cout << "In synSentState"<< c << endl;
+        SockRequestResponse repl;
+        repl.type=WRITE;
+        repl.connection=c;
+        repl.data=empty;
+        repl.error=EOK;
+
+        MinetSend(*sock, repl);
+
 		outer->state = new TCPStateEstablished(outer);
 	}
 
 	cout << "end of SynSentReceive" << endl;
 }
 
-void TCPStateEstablished::receive(MinetHandle* mux){
+void TCPStateEstablished::receive(MinetHandle* mux, MinetHandle* sock){
 	cout << "TCPStateEstablished::receive" << endl;
 }
 
-void TCPStateSynRecv::receive(MinetHandle* mux)
+void TCPStateSynRecv::receive(MinetHandle* mux, MinetHandle* sock)
 {
 	if(IS_ACK(outer->flags))
 	{
@@ -202,7 +217,7 @@ void TCPStateSynRecv::receive(MinetHandle* mux)
 	}
 }
 
-void TCPStateListen::receive(MinetHandle* mux)
+void TCPStateListen::receive(MinetHandle* mux, MinetHandle* sock)
 {
 	printf("TCPStateListen received\n");
 	printf("source test : %d\n", (*outer).sourcePort);
@@ -293,48 +308,11 @@ int main(int argc, char * argv[])
     MinetEvent event;
     double timeout = 1;
 
-    
-    // Server initial state
-    /*printf("Initializing Server");
-	TCP initState;
-	TCPStateListen listenState(&initState);
-	initState.state = &listenState;*/
-	
-	
 
-     //Client initial state
-    
-    printf("Intializing Client");
     TCP initState;
     TCPStateSynSent synSentState(&initState);
-    initState.state = &synSentState;
+    TCPStateListen listenState(&initState);
 
-
-	IPHeader iph;
-	TCPHeader tcph;
-	Packet outgoing_packet;
-	IPAddress *source = new IPAddress("192.168.126.15");
-	IPAddress *dest = new IPAddress("192.168.42.16");
-	unsigned char flags = 0;
-	iph.SetProtocol(IP_PROTO_TCP);
-	iph.SetSourceIP(*source);
-	iph.SetDestIP(*dest);
-	iph.SetTotalLength(IP_HEADER_BASE_LENGTH + TCP_HEADER_BASE_LENGTH);
-	outgoing_packet.PushFrontHeader(iph);
-
-	tcph.SetSourcePort(2020,outgoing_packet);
-    tcph.SetDestPort(5053,outgoing_packet);
-    SET_SYN(flags);
-    tcph.SetFlags(flags,outgoing_packet);  
-    tcph.SetSeqNum(100,outgoing_packet);     
-    tcph.SetWinSize(5840,outgoing_packet);
-    tcph.SetHeaderLen(TCP_HEADER_BASE_LENGTH,outgoing_packet);
-    outgoing_packet.PushBackHeader(tcph);		
-
-    MinetSend(mux, outgoing_packet);
-    sleep(3);
-    MinetSend(mux, outgoing_packet);
-    
 
     while (MinetGetNextEvent(event, timeout) == 0) 
     {
@@ -375,7 +353,7 @@ int main(int argc, char * argv[])
 		    	tcph.GetDestPort(c.srcport);
 		    	tcph.GetSourcePort(c.destport);
 		    	//printf("test1\n");
-
+		    	cout << "adding connection" << endl;
 		    	addConnection(&clist, &c, &initState);
 				/*ConnectionToStateMapping<TCP *> * a = new ConnectionToStateMapping<TCP *>();
 				Connection *conn = new Connection();
@@ -388,13 +366,14 @@ int main(int argc, char * argv[])
 				a->state = &initState; 
 		    	clist.push_back(*a);*/
 
-		    	ConnectionList<TCP *>::iterator cs = clist.FindMatching(c);
-		    	
+				ConnectionList<TCP *>::iterator cs = clist.FindMatching(c);
+
 
 		    	if(cs != clist.end()) 
 		    	{
 		    		printf("cs\n");
-		    		(*cs).state->receive(p, &mux);
+
+		    		(*cs).state->receive(p, &mux, &sock);
 
 	    			/*cout << "Sending in mux" << endl;
 	    			cout << "Recieve packet in right before send: " << receive_packet << endl;
@@ -428,11 +407,50 @@ int main(int argc, char * argv[])
 		    		case CONNECT:
 		    		{
 		    			cout << "CONNECT" << endl;
+					
+						Connection c = req.connection;
+						
+						cout << "Intializing Client" << endl;
+					    
+					    initState.state = &synSentState;
+		    			Buffer empty;
+		    			SockRequestResponse repl;
+		    			repl.type=STATUS;
+	   					repl.connection=req.connection;
+	    				repl.error=EOK;
+	    				MinetSend(sock, repl);
+
+						IPHeader iph;
+						TCPHeader tcph;
+						Packet outgoing_packet;
+
+						unsigned char flags = 0;
+						iph.SetProtocol(c.protocol);
+						iph.SetSourceIP(c.src);
+						iph.SetDestIP(c.dest);
+						iph.SetTotalLength(IP_HEADER_BASE_LENGTH + TCP_HEADER_BASE_LENGTH);
+						outgoing_packet.PushFrontHeader(iph);
+
+						tcph.SetSourcePort(c.srcport,outgoing_packet);
+					    tcph.SetDestPort(c.destport,outgoing_packet);
+					    SET_SYN(flags);
+					    tcph.SetFlags(flags,outgoing_packet);  
+					    tcph.SetSeqNum(100,outgoing_packet);     
+					    tcph.SetWinSize(5840,outgoing_packet);
+					    tcph.SetHeaderLen(TCP_HEADER_BASE_LENGTH,outgoing_packet);
+					    outgoing_packet.PushBackHeader(tcph);		
+
+					    MinetSend(mux, outgoing_packet);
+					    sleep(3);
+					    MinetSend(mux, outgoing_packet);
+
+
 		    			break;
 		    		}
 		    		case ACCEPT:
 		    		{
 		    			cout << "ACCEPT" << endl;
+		    			initState.state = &listenState;
 		    			break;
 		    		}
 		    		case STATUS:
@@ -443,6 +461,17 @@ int main(int argc, char * argv[])
 		    		case WRITE:
 		    		{
 		    			cout << "WRITE" << endl;
+		    			Buffer buffer = req.data;
+
+		    			ConnectionList<TCP *>::iterator cs = clist.FindMatching(req.connection);
+
+		    			if(cs != clist.end()) 
+		    			{
+		    				printf("cs\n");
+
+		    				(*cs).state->send(&buffer, &mux);
+		    			}
+
 		    			break;
 		    		}
 		    		case FORWARD:
