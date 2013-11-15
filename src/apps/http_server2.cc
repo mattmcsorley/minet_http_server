@@ -1,4 +1,4 @@
-#include "minet_socket.h"
+ #include "minet_socket.h"
 #include <stdlib.h>
 #include <fcntl.h>
 #include <ctype.h>
@@ -14,8 +14,8 @@ long get_file_size(FILE * f);
 int main(int argc, char * argv[]) {
     int server_port = -1;
     int rc          =  0;
-    int sock        = -1;
-	int res, s, c, accepted_sock, i;
+    //int sock        = -1;
+	int s, accepted_sock, i;
 	socklen_t address_length;
     struct sockaddr_in saddr;
 

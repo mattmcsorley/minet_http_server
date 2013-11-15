@@ -162,6 +162,7 @@ void TCP::send(Buffer* buf, MinetHandle* mux){
 }
 void TCPState::receive(MinetHandle* mux, MinetHandle* sock){}
 void TCPState::send(Buffer* buf, MinetHandle* mux){}
+
 TCP::TCP()
 {
 		ack_num = 300;
@@ -255,6 +256,9 @@ void TCPStateEstablished::receive(MinetHandle* mux, MinetHandle* sock){
 
 		//cout << "Payload: " << payload << endl;
 
+///////////////////////////////////////////////////
+// Used to echo data back to tcp conntection
+///////////////////////////////////////////////////
 		iph.SetProtocol(outer->protocol);
 		iph.SetSourceIP(outer->destIP);
 		iph.SetDestIP(outer->sourceIP);
@@ -266,8 +270,6 @@ void TCPStateEstablished::receive(MinetHandle* mux, MinetHandle* sock){
 	    SET_ACK(outgoing_flags);
 	    SET_PSH(outgoing_flags);
 	    tcph.SetFlags(outgoing_flags,outgoing_packet);
-	    //cout << "Setting seq_num to : " << outer->ack_num << endl;
-	    //cout << "Setting ack_num to : " << outer->seq_num + 1 << endl;
 	    tcph.SetSeqNum(outer->ack_num,outgoing_packet);
 
 	    
@@ -343,14 +345,14 @@ void TCPStateSynRecv::receive(MinetHandle* mux, MinetHandle* sock)
 
 void TCPStateListen::receive(MinetHandle* mux, MinetHandle* sock)
 {
-	//cout << "TCPStateListen::received" << endl;
+	cout << "TCPStateListen::received" << endl;
 	//printf("source test : %d\n", (*outer).sourcePort);
 	//printf("dest test : %d\n", (*outer).destPort);
 	unsigned char outgoing_flags = 0;
 
 	if(IS_SYN(outer->flags))
 	{
-		//cout << "IS_SYN" << endl;
+		cout << "RECEIVE -> IS_SYN" << endl;
 		IPHeader iph;
 		TCPHeader tcph;
 		Packet outgoing_packet;
@@ -379,10 +381,6 @@ void TCPStateListen::receive(MinetHandle* mux, MinetHandle* sock)
 		//ret_val = &(outer->outgoing_packet);
 	}
 
-	//cout << "Returning outgoing packet" << endl;
-	//cout << "Recieve packet in right before return in ListenRecieve: " << ret_val << endl;
-	//cout << "Dereferenced recieve packet in right before return in ListenRecieve: " << *ret_val << endl;
-	//return ret_val;
 }
 
 void addConnection(ConnectionList<TCP *> *clist, Connection *c, TCP *initState)
@@ -406,6 +404,7 @@ int main(int argc, char * argv[])
     MinetHandle sock;
    
     ConnectionList<TCP *> clist;
+    ConnectionList<TCP *> dummyList;
 
     MinetInit(MINET_TCP_MODULE);
 
@@ -434,9 +433,9 @@ int main(int argc, char * argv[])
 
 
     TCP initState;
-    TCPStateSynSent synSentState(&initState);
     TCPStateListen listenState(&initState);
-
+    //TCPStateListen listenState;
+    TCPStateSynSent synSentState(&initState);
 
     while (MinetGetNextEvent(event, timeout) == 0) 
     {
@@ -447,12 +446,13 @@ int main(int argc, char * argv[])
 		    if (event.handle == mux) 
 		    {
 				// ip packet has arrived!
-		    	//printf("MUXXXXX \n");
+		    	printf("MUXXXXX \n");
 		    	Packet p;
 		    	unsigned char header_len;
 		    	bool checksumok;
 		    	TCPHeader tcph;
 		    	IPHeader iph;
+				unsigned char flags;
 
 		    	MinetReceive(mux,p);
 		    	//Esimate header length
@@ -475,25 +475,43 @@ int main(int argc, char * argv[])
 		    	iph.GetProtocol(c.protocol);
 		    	tcph.GetDestPort(c.srcport);
 		    	tcph.GetSourcePort(c.destport);
-		    	//printf("test1\n");
-		    	//cout << "adding connection" << endl;
-		    	addConnection(&clist, &c, &initState);
-				/*ConnectionToStateMapping<TCP *> * a = new ConnectionToStateMapping<TCP *>();
-				Connection *conn = new Connection();
-				conn->src = c.src;
-				conn->dest = c.dest;
-				conn->protocol = c.protocol;
-				conn->srcport = c.srcport;
-				conn->destport = c.destport;
-				a->connection = *conn;
-				a->state = &initState; 
-		    	clist.push_back(*a);*/
+				tcph.GetFlags(flags);
+				
+				if( clist.FindMatching(c) == clist.end() )
+				{
+					cout << "NOT FOUND" << endl;
+					Connection dummy;
+		
+ 					tcph.GetDestPort(dummy.srcport);
+					iph.GetDestIP(dummy.src);
+					iph.GetProtocol(dummy.protocol);
+					cout << dummy << endl;
 
+					if ( dummyList.FindMatching(dummy) != dummyList.end() ){
+						cout << "FOUND IN DUMMYLIST" << endl;
+
+						if( IS_SYN(flags) && !IS_ACK(flags) )
+						{
+							cout << "IS_SYN" << endl; 
+							initState = *(new TCP());	
+							//TCPStateListen listenState(&initState);
+							listenState = *(new TCPStateListen(&initState));
+							initState.state = &listenState;
+							addConnection(&clist, &c, &initState);
+						}	
+					}
+					else
+					{
+						cout << "NOT FOUND IN DUMMYLIST" << endl;
+					}
+				}
+				
 				ConnectionList<TCP *>::iterator cs = clist.FindMatching(c);
 
 
 		    	if(cs != clist.end()) 
 		    	{
+		    		cout << "RECEIVE" << endl;
 		    		(*cs).state->receive(p, &mux, &sock);
 		    	}
 		    	else
@@ -517,12 +535,13 @@ int main(int argc, char * argv[])
 		    	{
 		    		case CONNECT:
 		    		{
-		    			//cout << "CONNECT" << endl;
+		    			cout << "CONNECT" << endl;
 					
 						Connection c = req.connection;
 						
-						//cout << "Intializing Client" << endl;
+						cout << "Intializing Client" << endl;
 					    
+    					
 					    initState.state = &synSentState;
 		    			Buffer empty;
 		    			SockRequestResponse repl;
@@ -543,25 +562,30 @@ int main(int argc, char * argv[])
 						outgoing_packet.PushFrontHeader(iph);
 
 						tcph.SetSourcePort(c.srcport,outgoing_packet);
-					    tcph.SetDestPort(c.destport,outgoing_packet);
-					    SET_SYN(flags);
-					    tcph.SetFlags(flags,outgoing_packet);  
-					    tcph.SetSeqNum(100,outgoing_packet);     
-					    tcph.SetWinSize(5840,outgoing_packet);
-					    tcph.SetHeaderLen(TCP_HEADER_BASE_LENGTH,outgoing_packet);
-					    outgoing_packet.PushBackHeader(tcph);		
+						tcph.SetDestPort(c.destport,outgoing_packet);
+						SET_SYN(flags);
+						tcph.SetFlags(flags,outgoing_packet);  
+						tcph.SetSeqNum(100,outgoing_packet);     
+						tcph.SetWinSize(5840,outgoing_packet);
+						tcph.SetHeaderLen(TCP_HEADER_BASE_LENGTH,outgoing_packet);
+						outgoing_packet.PushBackHeader(tcph);		
+						addConnection(&clist, &c, &initState);
+						
+						MinetSend(mux, outgoing_packet);
+						sleep(3);
+						MinetSend(mux, outgoing_packet);
 
-					    MinetSend(mux, outgoing_packet);
-					    sleep(3);
-					    MinetSend(mux, outgoing_packet);
-
-
-		    			break;
+						break;
 		    		}
 		    		case ACCEPT:
 		    		{
-		    			//cout << "ACCEPT" << endl;
-		    			initState.state = &listenState;
+		    			cout << "ACCEPT" << endl;
+		    			Connection c = req.connection;
+		    			cout << c << endl;
+    					
+    					addConnection(&dummyList, &c, NULL);
+
+		    			//initState.state = &listenState;
 
 		    			SockRequestResponse repl;
 		    			repl.type = STATUS;
@@ -574,12 +598,12 @@ int main(int argc, char * argv[])
 		    		}
 		    		case STATUS:
 		    		{
-		    			//cout << "STATUS" << endl;
+		    			cout << "STATUS" << endl;
 		    			break;
 		    		}
 		    		case WRITE:
 		    		{
-		    			//cout << "WRITE" << endl;
+		    			cout << "WRITE" << endl;
 		    			Buffer buffer = req.data;
 		    			unsigned int bufferSize = buffer.GetSize();
 
