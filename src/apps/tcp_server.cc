@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <iostream>
 #include <ctype.h>
+#include <signal.h>
 #include "minet_socket.h"
 
 using std::cout;
@@ -8,10 +9,18 @@ using std::cin;
 using std::cerr;
 using std::endl;
 
+
+bool done = false;
 void usage()
 {
   cerr << "tcp_server k|u port\n";
 }
+
+void term(int signum) {
+  done = true;
+}
+
+
 
 int main(int argc, char *argv[])
 {
@@ -19,6 +28,10 @@ int main(int argc, char *argv[])
   sockaddr_in server_sa, client_sa;
   int cfd, fd, rc;
 
+  struct sigaction action;
+  memset(&action, 0, sizeof(struct sigaction));
+  action.sa_handler = term;
+  sigaction(SIGTERM, &action, NULL);
   if (argc!=3) {
     usage();
     exit(-1);
@@ -97,6 +110,12 @@ int main(int argc, char *argv[])
       cerr << "Write failed.\n";
       minet_perror("reason:");
       goto err;
+    }
+
+    if (done)
+    {
+      cerr << "Done.\n";
+      goto done;
     }
   }
 
